@@ -1,0 +1,28 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: retraining-test-postgres
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: retraining_test_user
+      POSTGRES_PASSWORD: retraining_test_password
+      POSTGRES_DB: retraining_test_db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U retraining_test_user -d retraining_test_db"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+    tmpfs:
+      - /var/lib/postgresql
+
+  aws:
+    image: motoserver/moto:5.1.4
+    container_name: retraining-test-aws
+    ports:
+      - "4567:5000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/moto-api/')\""]
+      interval: 2s
+      timeout: 5s
+      retries: 15

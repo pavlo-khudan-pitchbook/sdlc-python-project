@@ -1,0 +1,74 @@
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: test-cronjob
+spec:
+  image: 123456789012.dkr.ecr.us-east-1.amazonaws.com/test-cronjob
+  provider: aws
+  interval: 5m
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: test-cronjob
+spec:
+  imageRepositoryRef:
+    name: test-cronjob
+  filterTags:
+    pattern: '^v(?P<version>[0-9]+\.[0-9]+\.[0-9]+)-dev$'
+    extract: '$version'
+  policy:
+    semver:
+      range: '>=0.1.0'
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: test-cronjob
+  labels:
+    app.kubernetes.io/instance: test-cronjob
+spec:
+  interval: 30m
+  chartRef:
+    kind: HelmChart
+    name: python-cron
+    namespace: shared-services
+  values:
+    serviceAccount:
+      permissions:
+        sagemaker:
+          execution:
+            enabled: true
+          trigger:
+            enabled: true
+      externalAwsPermissions:
+        s3:
+          buckets:
+            - support-dev-ticket-classifier-training-data
+            - support-dev-ticket-classifier-model-artifacts
+    image: "123456789012.dkr.ecr.us-east-1.amazonaws.com/test-cronjob:v0.3.0-dev" # {"$imagepolicy": "aiml:test-cronjob"}
+    resources:
+      cpu: 500m
+      memory: 512Mi
+    env:
+      ENVIRONMENT: "k8s"
+      LOG_LEVEL: "info"
+      LOG_FORMAT: "json"
+      DB_HOST: "retraining-dev.cluster-abc123.us-east-1.rds.amazonaws.com"
+      DB_PORT: "5432"
+      DB_NAME: "retraining"
+      AWS_REGION: "us-east-1"
+      SOURCE_TABLE: "support.ticket_labels"
+      TRAINING_DATA_S3_BUCKET: "support-dev-ticket-classifier-training-data"
+      MODEL_ARTIFACTS_S3_BUCKET: "support-dev-ticket-classifier-model-artifacts"
+      SAGEMAKER_ROLE_ARN: "arn:aws:iam::123456789012:role/AmazonSageMaker-ExecutionRole"
+      TRAINING_IMAGE_URI: "123456789012.dkr.ecr.us-east-1.amazonaws.com/ticket-classifier-training:1.4.0"
+      TRAINING_INSTANCE_TYPE: "ml.m5.xlarge"
+      MODEL_NAME: "ticket-classifier"
+      # DB_USERNAME / DB_PASSWORD come from the namespace secret, not from this file
+    cronjobs:
+      - name: retrain
+        schedule: "0 2 * * *"
+        suspend: false
+  driftDetection:
+    mode: enabled
