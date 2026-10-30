@@ -1,0 +1,47 @@
+include:
+- project: ${GITLAB_CI_TEMPLATES_REPO}
+  file: python-cron/base.yml
+
+variables:
+  PYTHON_IMAGE: "astral/uv:python3.13-bookworm"
+
+linting:
+  extends: .test
+  variables:
+    SKIP: uv-lock
+  script:
+    - uv run pre-commit run --all-files
+
+test:
+  extends: .test
+  script:
+    - >-
+      uv run pytest
+      -p no:warnings
+      --junit-xml=test-results.xml
+      --cov-report=xml
+      --cov-report=term
+      --cov-fail-under=50
+      tests/unit
+
+docker:
+  extends: .docker
+  variables:
+    IMAGE_NAME: test-cronjob
+
+deploy-dev:
+  extends: .deploy-dev
+  needs:
+    - docker
+
+deploy-preprod:
+  extends: .deploy-preprod
+  needs:
+    - docker
+
+deploy-prod:
+  extends: .deploy-prod
+  variables:
+    MANUAL_DEPLOY: "true"
+  needs:
+    - docker
